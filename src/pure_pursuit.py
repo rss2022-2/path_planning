@@ -72,7 +72,9 @@ class PurePursuit(object):
         dot_product = np.dot(car_unit_vec, lookahead_unit_vec)
         # rospy.logerr(car_unit_vec)
         # rospy.logerr(lookahead_unit_vec)
-        # rospy.logerr(dot_product)
+        
+        dot_product = max(-1, dot_product) if dot_product < 0 else min(1, dot_product)
+        assert -1 <= dot_product <= 1, dot_product
         alpha = np.arccos(dot_product)
 
         # steering angle
@@ -80,11 +82,28 @@ class PurePursuit(object):
         #                         / (self.P_gain * self.speed))
         steer_ang = np.arctan(2*self.wheelbase_length*np.sin(alpha)
                         / (distance))
+        
+        car_to_orgin_angle = np.arctan2(car_unit_vec[0], car_unit_vec[1])
+        car_to_orgin_angle = car_to_orgin_angle if car_to_orgin_angle > 0 else 2*np.pi + car_to_orgin_angle
+        lookahead_to_orgin_angle = np.arctan2(lookahead_unit_vec[0], lookahead_unit_vec[1])
+        lookahead_to_orgin_angle = lookahead_to_orgin_angle if lookahead_to_orgin_angle > 0 else 2*np.pi + lookahead_to_orgin_angle
+
+        # find sign for steering angle by looking at car and lookahead vectors
+        if car_to_orgin_angle < lookahead_to_orgin_angle:
+            if lookahead_to_orgin_angle - car_to_orgin_angle > np.pi:
+                steer_ang = steer_ang
+            else:
+                steer_ang = -steer_ang
+        else:
+            if car_to_orgin_angle - lookahead_to_orgin_angle > np.pi:
+                steer_ang = -steer_ang
+            else:
+                steer_ang = steer_ang
 
 
         # publish drive commands
         drive_msg = AckermannDriveStamped()
-        drive_msg.drive.speed = 0
+        drive_msg.drive.speed = self.speed
         drive_msg.drive.steering_angle = steer_ang
         drive_msg.drive.acceleration = 0
         drive_msg.drive.steering_angle_velocity = 0
