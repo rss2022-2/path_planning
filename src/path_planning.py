@@ -23,55 +23,62 @@ class PathPlan(object):
 
 
     def map_cb(self, msg):
-        #copying sensor model map callback for now
-        #so map is array
-        self.map = np.array(msg.data, np.double)/100.
-        self.map = np.clip(self.map, 0, 1)
-        self.map_resolution = msg.info.resolution
-
-        # Convert the origin to a tuple
-        origin_p = msg.info.origin.position
-        origin_o = map_msg.info.origin.orientation
-        origin_o = tf.transformations.euler_from_quaternion((origin_o.x,origin_o.y,origin_o.z,origin_o.w))
-        origin = (origin_p.x, origin_p.y, origin_o[2])
-
-        #maybe initialize the laser scan like in sensor model?
-
+        self.orientation = msg.info.origin.orientation
+        self.pos = msg.info.origin.position
+        self.res = msg.info.resolution
+        self.grid = np.array(msg.data).reshape((msg.info.height, msg.info.width))
+        
+      
     def odom_cb(self, msg):
-        self.startx = msg.pose.pose.position.x
-        self.starty = msg.pose.pose.position.y
-        self.startz = msg.pose.pose.position.z
+        self.startx = msg.pose.position.x
+        self.starty = msg.pose.position.y
+        self.startz = msg.pose.position.z
 
 
     def goal_cb(self, msg):
         self.goalx = msg.pose.position.x
         self.goaly = msg.pose.position.y
         self.goalz = msg.pose.position.z
+       
+    def pix2coord(self,msg):
+        self.resolution = msg.info.resolution
+        
+        r,p,y = tf.transformations.euler_from_quaternion([msg.info.origin.orientation.x,msg.info.origin.orientation.y,msg.info.origin.orientation.z,msg.info.origin.orientation.w])
+        u, v = msg.info.origin.position.x, msg.info.origin.position.y
+        
+        rotation = np.array([[np.cos(y), -np.sin(y), u], [np.sin(y),  np.cos(y), v],[0,0,1]]) 
+        x, y = np.
 
-    def plan_path(self, start_point, end_point, map):
+    def a_star(self, start_point, end_point):
         ## CODE FOR PATH PLANNING ##
         # referencing the doc given for A*
         frontier = PriorityQueue()
-        frontier.put(start, 0)
+        frontier.put(start_point, 0)
         came_from = dict()
         cost_so_far = dict()
-        came_from[start] = None
-        cost_so_far[start] = 0
+        came_from[start_point] = None
+        cost_so_far[start_point] = 0
 
         while not frontier.empty():
             current = frontier.get()
 
-        if current == goal:
-            break
+            if current == goal:
+                break
    
-        for next in graph.neighbors(current):
-            new_cost = cost_so_far[current] + graph.cost(current, next)
-            if next not in cost_so_far or new_cost < cost_so_far[next]:
-                cost_so_far[next] = new_cost
-                priority = new_cost + heuristic(goal, next)
-                frontier.put(next, priority)
-                came_from[next] = current
+            for next in graph.neighbors(current):
+                new_cost = cost_so_far[current] + graph.cost(current, next)
+                if next not in cost_so_far or new_cost < cost_so_far[next]:
+                    cost_so_far[next] = new_cost
+                    priority = new_cost + heuristic(goal, next)
+                    frontier.put(next, priority)
+                    came_from[next] = current
 
+        return came_from, cost_so_far        
+    
+    def plane_path(self, start_point, end_point, map):
+        #use a star to  get the ggeneral path
+        path, cost = self.a_star(start_point, end_point)
+        
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
