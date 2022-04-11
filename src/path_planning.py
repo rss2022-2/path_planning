@@ -22,18 +22,34 @@ class PathPlan(object):
 
 
     def map_cb(self, msg):
-        pass ## REMOVE AND FILL IN ##
+        #copying sensor model map callback for now
+        #so map is array
+        self.map = np.array(msg.data, np.double)/100.
+        self.map = np.clip(self.map, 0, 1)
+        self.map_resolution = msg.info.resolution
 
+        # Convert the origin to a tuple
+        origin_p = msg.info.origin.position
+        origin_o = map_msg.info.origin.orientation
+        origin_o = tf.transformations.euler_from_quaternion((origin_o.x,origin_o.y,origin_o.z,origin_o.w))
+        origin = (origin_p.x, origin_p.y, origin_o[2])
+
+        #maybe initialize the laser scan like in sensor model?
 
     def odom_cb(self, msg):
-        pass ## REMOVE AND FILL IN ##
+        self.startx = msg.pose.pose.position.x
+        self.starty = msg.pose.pose.position.y
+        self.startz = msg.pose.pose.position.z
 
 
     def goal_cb(self, msg):
-        pass ## REMOVE AND FILL IN ##
+        self.goalx = msg.pose.position.x
+        self.goaly = msg.pose.position.y
+        self.goalz = msg.pose.position.z
 
     def plan_path(self, start_point, end_point, map):
         ## CODE FOR PATH PLANNING ##
+        
 
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
@@ -46,3 +62,4 @@ if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
     rospy.spin()
+
