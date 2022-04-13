@@ -20,7 +20,9 @@ class PurePursuit(object):
         self.lookahead          = rospy.get_param("~lookahead")
         self.lookahead_increase = rospy.get_param("~lookahead_increase")
         self.speed              = rospy.get_param("~speed")
+        self.fast_speed         = rospy.get_param("~fast_speed")
         self.wheelbase_length   = rospy.get_param("~wheelbase_length")
+        self.small_angle        = rospy.get_param("~small_steering_angle")
         self.P_gain             = 2.0
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
@@ -103,7 +105,8 @@ class PurePursuit(object):
 
         # publish drive commands
         drive_msg = AckermannDriveStamped()
-        drive_msg.drive.speed = self.speed
+        # optimization: run fast if steer_ang is small
+        drive_msg.drive.speed = self.fast_speed if abs(steer_ang) <= self.small_angle else self.speed
         drive_msg.drive.steering_angle = steer_ang
         drive_msg.drive.acceleration = 0
         drive_msg.drive.steering_angle_velocity = 0
