@@ -38,7 +38,7 @@ class PurePursuit(object):
         self.drive_pub = rospy.Publisher(self.drive_topic, AckermannDriveStamped, queue_size=1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=10)
 
-        rospy.Timer(rospy.Duration(1/20), self.send_cmd)
+        rospy.Timer(rospy.Duration(1.0/20.0), self.send_cmd)
 
     def send_cmd(self, event):
         self.drive_msg.header.stamp = rospy.Time.now()
