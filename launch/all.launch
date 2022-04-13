@@ -1,0 +1,21 @@
+<launch>
+  <!-- Launch the localization -->
+  <node pkg="localization" type="particle_filter.py" name="particle_filter" output="screen">
+    <rosparam command="load" file="$(find localization)/params_real.yaml"/>
+  </node>
+  
+  <!-- Launch map server -->
+  <arg name="map" default="$(find lab6)/maps/stata_basement.yaml"/>
+  <node pkg="map_server" name="map_server" type="map_server" args="$(arg map)"/>
+  
+  <!-- Launch trajectory follower -->
+  <node pkg="lab6" type="pure_pursuit.py" name="Trajectory_follower">
+	<rosparam command="load" file="$(find lab6)/params.yaml"/>
+  </node>  
+  
+  <!-- Launch trajectory loader -->
+  <!-- <node pkg="lab6" type="trajectory_loader.py" name="Trajectory_loader">
+	<param name="trajectory" value="$(find lab6)/trajectories/loop2.traj"/>
+  </node> -->
+  
+</launch>
