@@ -24,10 +24,24 @@ class PurePursuit(object):
         self.wheelbase_length   = rospy.get_param("~wheelbase_length")
         self.small_angle        = rospy.get_param("~small_steering_angle")
         self.P_gain             = 2.0
+
+        # publish drive commands
+        drive_msg = AckermannDriveStamped()
+        drive_msg.drive.acceleration = 0
+        drive_msg.drive.steering_angle_velocity = 0
+        drive_msg.drive.jerk = 0
+        self.drive_msg = drive_msg
+
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=10)
+
+        rospy.Timer(rospy.Duration(1/20), self.send_cmd)
+
+    def send_cmd(self, event):
+        self.drive_msg.header.stamp = rospy.Time.now()
+        self.drive_pub.publish(self.drive_msg)
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -104,15 +118,11 @@ class PurePursuit(object):
 
 
         # publish drive commands
-        drive_msg = AckermannDriveStamped()
+        self.drive_msg = AckermannDriveStamped()
         # optimization: run fast if steer_ang is small
-        drive_msg.drive.speed = self.fast_speed if abs(steer_ang) <= self.small_angle else self.speed
-        drive_msg.drive.steering_angle = steer_ang
-        drive_msg.drive.acceleration = 0
-        drive_msg.drive.steering_angle_velocity = 0
-        drive_msg.drive.jerk = 0
-        drive_msg.header.stamp = rospy.Time.now()
-        self.drive_pub.publish(drive_msg)
+        self.drive_msg.drive.speed = self.fast_speed if abs(steer_ang) <= self.small_angle else self.speed
+        self.drive_msg.drive.steering_angle = steer_ang
+        
 
     def find_lookahead_point(self, dis_to_seg, point_car):
         '''
