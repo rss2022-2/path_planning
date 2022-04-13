@@ -23,6 +23,7 @@ class PurePursuit(object):
         self.fast_speed         = rospy.get_param("~fast_speed")
         self.wheelbase_length   = rospy.get_param("~wheelbase_length")
         self.small_angle        = rospy.get_param("~small_steering_angle")
+        self.drive_topic        = rospy.get_param("~drive_topic")
         self.P_gain             = 2.0
 
         # publish drive commands
@@ -34,7 +35,7 @@ class PurePursuit(object):
 
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        self.drive_pub = rospy.Publisher(self.drive_topic, AckermannDriveStamped, queue_size=1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=10)
 
         rospy.Timer(rospy.Duration(1/20), self.send_cmd)
