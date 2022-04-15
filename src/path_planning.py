@@ -94,7 +94,7 @@ class PathPlan(object):
             self.start_ready = True
 
             #Attempt to plan a path
-            self.plan_path(self.start_point, self.goal_point, self.map_data)
+            # self.plan_path(self.start_point, self.goal_point, self.map_data)
 
     def goal_cb(self, msg):
         if self.map_ready:

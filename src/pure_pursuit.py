@@ -17,13 +17,13 @@ class PurePursuit(object):
     """
     def __init__(self):
         self.odom_topic         = rospy.get_param("~odom_topic")
-        self.lookahead          = rospy.get_param("~lookahead")
-        self.lookahead_increase = rospy.get_param("~lookahead_increase")
-        self.speed              = rospy.get_param("~speed")
-        self.fast_speed         = rospy.get_param("~fast_speed")
-        self.wheelbase_length   = rospy.get_param("~wheelbase_length")
-        self.small_angle        = rospy.get_param("~small_steering_angle")
-        self.drive_topic        = rospy.get_param("~drive_topic")
+        self.lookahead          = 1.0 #rospy.get_param("~lookahead")
+        self.lookahead_increase = 0.5 #rospy.get_param("~lookahead_increase")
+        self.speed              = 1.0 #rospy.get_param("~speed")
+        self.fast_speed         = 1.0 #rospy.get_param("~fast_speed")
+        self.wheelbase_length   = 0.3 #rospy.get_param("~wheelbase_length")
+        self.small_angle        = 0.01 #rospy.get_param("~small_steering_angle")
+        self.drive_topic        = "/drive" #rospy.get_param("~drive_topic")
         self.P_gain             = 2.0
 
         # publish drive commands
