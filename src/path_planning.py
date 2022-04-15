@@ -2,8 +2,6 @@
 
 from curses.textpad import rectangle
 from operator import index
-from turtle import left
-from sklearn import tree
 import rospy
 import numpy as np
 import tf
