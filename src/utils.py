@@ -231,3 +231,6 @@ class LineTrajectory(object):
         header.stamp = stamp
         header.frame_id = frame_id
         return header
+
+    def get_points(self):
+        return self.points
