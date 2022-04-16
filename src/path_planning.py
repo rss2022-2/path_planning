@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-from curses.textpad import rectangle
-from operator import index
 import rospy
 import numpy as np
 import tf
@@ -15,9 +13,6 @@ from numpy import inf
 import math
 
 class PathPlan(object):
-    """ Listens for goal pose published by RViz and uses it to plan a path from
-    current car pose.
-    """
     def __init__(self):
         self.odom_topic = rospy.get_param("~odom_topic")
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
@@ -25,196 +20,143 @@ class PathPlan(object):
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
-
-        self.algorithm = "A_star" # which search algorithm to use "A_star" and "RRT"
-
-        self.box_size = 1 # Determines how granular to discretize the data, A* default = 10
-        self.occupied_threshold = 3 #Probability threshold to call a grid space occupied (0 to 100)
+        
+        self.box_size = 10 
+        self.occupied_threshold = 3 
+        self.padding = 5 
 
         self.map_ready = False
         self.start_ready = False
         self.goal_ready = False
 
-        self.map_width = None
-        self.map_height = None
         self.map_resolution = None
         self.map_data = None
-        self.dmap_width = None # width of discretized map
-        self.dmap_height= None # height of discretized map
+        self.dmap_width = None 
+        self.dmap_height= None 
 
         self.start_point = None
         self.goal_point = None
 
-
     def map_cb(self, msg):
-        #Extract all the info from the map message
-        self.map_width = msg.info.width
-        self.map_height = msg.info.height
         self.map_resolution = msg.info.resolution
-        self.map_orientation = msg.info.origin.orientation #Quaternion
-        self.map_position = msg.info.origin.position #Point
+        self.map_orientation = msg.info.origin.orientation 
+        self.map_position = msg.info.origin.position
 
-        #Discretize the map
-        self.map_data = self.discretize_map(self.map_height, self.map_width, np.array(msg.data))
-        self.dmap_height, self.dmap_width = self.map_data.shape
+        map_2d = np.array(msg.data).reshape((msg.info.height, msg.info.width))
+        map_2d_copy = map_2d.copy()
 
-        rospy.loginfo(np.unique(msg.data))
+        for row in range(self.padding, msg.info.height - self.padding):
+            for col in range(self.padding, msg.info.width - self.padding):
+                if map_2d_copy[row, col] > self.occupied_threshold:
+                    for i in range(-self.padding, self.padding + 1):
+                        for j in range(-self.padding, self.padding + 1):
+                            map_2d[row+i, col+j] = 100
 
-        #Signal that the map has been loaded
-        self.map_ready = True
+        map_2d[map_2d == -1] = 100
 
-    def discretize_map(self, height, width, data):
-        #Replace all unknown grid spaces as fully occupied
-        data[data == -1] = 100
-
-        #Turn the data into a 2D grid
-        map_2d = data.reshape((height, width))
-
-        #Iterate through every nth row and nth column
-        discretized_map_2d = np.zeros((height//self.box_size, width//self.box_size))
-        for row in range(0, height-self.box_size+1, self.box_size):
-            for col in range(0, width-self.box_size+1, self.box_size):
-                #Take the average of each box_size by box_size square and make that the new value
+        discretized_map_2d = np.zeros((msg.info.height//self.box_size, msg.info.width//self.box_size))
+        for row in range(0, msg.info.height-self.box_size+1, self.box_size):
+            for col in range(0, msg.info.width-self.box_size+1, self.box_size):
                 avg = np.average(map_2d[row:row + self.box_size, col:col + self.box_size])
                 discretized_map_2d[row//self.box_size, col//self.box_size] = avg
         
-        #Note: For Stata Basement, the rows are from bottom to top (index 0 = bottom of map) because the
-        #orientation of the map's origin is rotated 180 degrees over the z-axis. This should resolve
-        #itself when transforming the map frame (hopefully)
-        return discretized_map_2d
+        self.map_data = discretized_map_2d
+        self.dmap_height, self.dmap_width = self.map_data.shape
+        self.map_ready = True
+        self.plan_path(self.start_point, self.goal_point, self.map_data)
 
     def odom_cb(self, msg):
-        if self.map_ready:
-            #Get the x and y position of the car from the odometry
-            start_x = msg.pose.pose.position.x
-            start_y = msg.pose.pose.position.y
-            self.start_point = np.array([start_x, start_y])
-
-            #Signal that the start position has been loaded
-            self.start_ready = True
-
-            #Attempt to plan a path
-            # self.plan_path(self.start_point, self.goal_point, self.map_data)
+        self.start_point = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y])
+        self.start_ready = True
+        self.plan_path(self.start_point, self.goal_point, self.map_data)
 
     def goal_cb(self, msg):
-        if self.map_ready:
-            #Get the x and y position of the goal from the 2D Nav Goal
-            goal_x = msg.pose.position.x
-            goal_y = msg.pose.position.y
-            self.goal_point = np.array([goal_x, goal_y])
-
-            #Signal that the goal position has been loaded
-            self.goal_ready = True
-
-            #Attempt to plan a path
-            self.plan_path(self.start_point, self.goal_point, self.map_data)
-
+        self.goal_point = np.array([msg.pose.position.x, msg.pose.position.y])
+        self.goal_ready = True
+        self.plan_path(self.start_point, self.goal_point, self.map_data)
 
     def plan_path(self, start_point, goal_point, map):
         if self.map_ready and self.start_ready and self.goal_ready:
-            #Convert the start and goal point into their discretized coordinates
+            self.goal_ready = False
+
             discretized_start = self.xy_to_discretized(start_point)
             discretized_goal = self.xy_to_discretized(goal_point)
 
-            #Run search algorithm using the discretized start and goal
-            rospy.loginfo(self.algorithm + " is starting planning")
-            uv_path = self.A_star(discretized_start, discretized_goal)
+            uv_path = self.a_star(discretized_start, discretized_goal)
 
-            #Convert path from (u,v) pixels to (x,y) coordinates in the map frame
-            xy_path = []
-            for coord in uv_path:
-                xy_coord = self.discretized_to_xy(coord)
-                xy_path.append(xy_coord)
+            if uv_path is not None:
+                xy_path = []
+                self.trajectory.clear()
+                for coord in uv_path:
+                    xy_coord = self.discretized_to_xy(coord)
+                    xy_path.append(xy_coord)
 
-                point = Point()
-                point.x = xy_coord[0]
-                point.y = xy_coord[1]
-                self.trajectory.addPoint(point)
+                    point = Point()
+                    point.x = xy_coord[0]
+                    point.y = xy_coord[1]
+                    self.trajectory.addPoint(point)
 
-            # publish trajectory
-            self.traj_pub.publish(self.trajectory.toPoseArray())
-
-            # visualize trajectory Markers
-            self.trajectory.publish_viz()
+                self.traj_pub.publish(self.trajectory.toPoseArray())
+                self.trajectory.publish_viz()
 
     def xy_to_discretized(self, coord):
-        #Get the rotation matrix from the map frame to the image frame
         rot_mat = tf.transformations.quaternion_matrix([self.map_orientation.x, self.map_orientation.y, self.map_orientation.z, self.map_orientation.w])
         rot_mat = np.array([[rot_mat[0,0], rot_mat[0,1]], [rot_mat[1,0], rot_mat[1,1]]])
-
-        #Transform the coordinate from the map frame to the image frame 
-        pixel = (np.dot(rot_mat, coord) + np.array([self.map_position.x, self.map_position.y]))/self.map_resolution
-
-        #Scale the pixel to its corresponding location in our discrete grid space (and flip x and y)
+        
+        pixel = (np.dot(rot_mat, coord) + np.array([self.map_position.x, self.map_position.y])) / self.map_resolution
         discretized = (int(pixel[1]//self.box_size), int(pixel[0]//self.box_size))
 
         return discretized
 
     def discretized_to_xy(self, coord):
-        #Get the rotation matrix from the image frame to the map frame
         quat_inverse = tf.transformations.quaternion_inverse([self.map_orientation.x, self.map_orientation.y, self.map_orientation.z, self.map_orientation.w])
         rot_mat = tf.transformations.quaternion_matrix(quat_inverse)
         rot_mat = np.array([[rot_mat[0,0], rot_mat[0,1]], [rot_mat[1,0], rot_mat[1,1]]])
 
-        #Get the xy value of the given coordinate
         xy_untranslated = np.array([coord[1], coord[0]]) * self.box_size * self.map_resolution
-
-        #Translate and rotate the xy coordinate into the map frame
         xy_translated = xy_untranslated - np.array([self.map_position.x, self.map_position.y])
         xy = np.dot(rot_mat, xy_translated)
 
         return tuple(xy)
 
-    def A_star(self, start, goal):
-        #Heuristic function based on the straight line distance from start to goal
-        heuristic_func = lambda start, goal: math.sqrt((start[0] - goal[0])**2 + (start[1] - goal[1])**2)
-        #Cost function of 1 to move to an unoccupied cell, infinity to moved to an occupied one
-        cost_func = lambda node: 1 if self.map_data[node[0],node[1]] < self.occupied_threshold else np.inf
-        
-        open = {start} #Set of nodes discovered so far
-        segments = {} #Map of nodes to the prior node they were found by (used for path reconstruction)
-        cost = {start: 0} #Cost of the path to each node so far
-        score = {start: heuristic_func(start, goal)} #Cost of the path to each node + heuristic for remaining distance
+    def heur(self, node, end_point):
+        dist = np.sqrt((node[0] - end_point[0])**2 + (node[1] - end_point[1])**2)
+        return dist
+
+    def cost(self, curr, node):
+        if self.map_data[node[0],node[1]] < self.occupied_threshold:
+            return heur(curr, node)
+        else
+            return np.inf
+
+    def a_star(self, start, goal):
+        open = {start} 
+        segments = {} 
+        cost = {start: 0} 
+        score = {start: heur(start, goal)} 
 
         while open:
-            #Get the min score node
             curr = min(open, key=score.get)
-
-            #If the node is the goal node, reconstruct the path
             if curr == goal:
                 return self.get_path(segments, curr)
-
-            #Explore the neighbors of the current node
             open.remove(curr)
             for node in self.get_neighbors(curr):
                 node = tuple(node)
-                #If the path to this node is min cost so far, record it
-                temp_cost = cost.get(curr, np.inf) + cost_func(node)
+                temp_cost = cost.get(curr, np.inf) + cost(curr, node)
                 if temp_cost < cost.get(node, np.inf):
                     segments[node] = curr
                     cost[node] = temp_cost
-                    score[node] = temp_cost + heuristic_func(node, goal)
+                    score[node] = temp_cost + heur(node, goal)
                     if node not in open:
                         open.add(node)
     
     def get_neighbors(self, node):
-        #Add the 8 adjacent cells (vertical, horizontal, and diagonal) to the set of neighbors
-        neighbors = np.array([
-            (node[0]+1, node[1]+1),
-            (node[0]+1, node[1]),
-            (node[0]+1, node[1]-1),
-            (node[0], node[1]+1),
-            (node[0], node[1]-1),
-            (node[0]-1, node[1]+1),
-            (node[0]-1, node[1]),
-            (node[0]-1, node[1]-1)])
-        
-        #Filter any neighbors that are out of the map
-        neighbors = neighbors[neighbors[:,0] >= 0]
-        neighbors = neighbors[neighbors[:,0] < self.map_height]
-        neighbors = neighbors[neighbors[:,1] >= 0]
-        neighbors = neighbors[neighbors[:,1] < self.map_width]
-
+        neighbors = []
+        for i in range(3):
+            for j in range(3):
+                if not ((j == 1 and i == 1) or node[0] +1 -i < 0 or node[1] +1 -j < 0 or node[0] +1 -i >= self.grid.shape[0] or node[1] +1 -j >= self.grid.shape[1]):
+                    if self.grid[node[0]+1-i,node[1]+1-j] == 0:
+                        neighbors.append((node[0] + 1 - i, node[1] + 1 -j))
         return neighbors
 
     def get_path(self, segments, node):
