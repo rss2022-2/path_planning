@@ -128,8 +128,7 @@ class PathPlan(object):
     def cost(self, curr, node):
         if self.map_data[node[0],node[1]] < self.occupied_threshold:
             return heur(curr, node)
-        else
-            return np.inf
+        return np.inf
 
     def a_star(self, start, goal):
         open = {start} 
