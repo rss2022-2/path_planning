@@ -31,6 +31,7 @@ class PathPlan(object):
 
         self.map_resolution = None
         self.map_data = None
+        self.map_dimensions = None
         self.dmap_width = None 
         self.dmap_height= None 
 
@@ -41,6 +42,7 @@ class PathPlan(object):
         self.map_resolution = msg.info.resolution
         self.map_orientation = msg.info.origin.orientation 
         self.map_position = msg.info.origin.position
+        self.map_dimensions = (msg.info.height, msg.info.width)
 
         map_2d = np.array(msg.data).reshape((msg.info.height, msg.info.width))
         map_2d_copy = map_2d.copy()
@@ -152,11 +154,11 @@ class PathPlan(object):
     
     def get_neighbors(self, node):
         neighbors = []
-        for i in range(3):
-            for j in range(3):
-                if not ((j == 1 and i == 1) or node[0] +1 -i < 0 or node[1] +1 -j < 0 or node[0] +1 -i >= self.grid.shape[0] or node[1] +1 -j >= self.grid.shape[1]):
-                    if self.grid[node[0]+1-i,node[1]+1-j] == 0:
-                        neighbors.append((node[0] + 1 - i, node[1] + 1 -j))
+        for i in [-1,0,1]:
+            for j in [-1,0,1]:
+                neighbor = (node[0] + i, node[1] + j)
+                if self.map_data[neighbor[1]][neighbor[0]] == 0 and neighbor[0] >= 0 and neighbor[1] >= 0 and neighbor[0] < self.map_dimensions[1] and neighbor[1] < self.map_dimensions[0]:
+                    neighbors.append(neighbor)
         return neighbors
 
     def get_path(self, segments, node):
