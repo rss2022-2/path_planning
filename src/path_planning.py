@@ -27,6 +27,7 @@ class PathPlan(object):
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
 
         self.algorithm = "A_star" # which search algorithm to use "A_star" and "RRT"
+        self.map_msg = None
 
         self.box_size = 1 # Determines how granular to discretize the data, A* default = 10
         self.occupied_threshold = 3 #Probability threshold to call a grid space occupied (0 to 100)
@@ -54,15 +55,15 @@ class PathPlan(object):
         self.map_resolution = msg.info.resolution
         self.map_orientation = msg.info.origin.orientation #Quaternion
         self.map_position = msg.info.origin.position #Point
-
+        self.map_msg = msg
         #Discretize the map
-        self.map_data = self.discretize_map(self.map_height, self.map_width, np.array(msg.data))
-        self.dmap_height, self.dmap_width = self.map_data.shape
+        # self.map_data = self.discretize_map(self.map_height, self.map_width, np.array(msg.data))
+        # self.dmap_height, self.dmap_width = self.map_data.shape
 
-        rospy.loginfo(np.unique(msg.data))
+        # rospy.loginfo(np.unique(msg.data))
 
-        #Signal that the map has been loaded
-        self.map_ready = True
+        # #Signal that the map has been loaded
+        # self.map_ready = True
 
     def discretize_map(self, height, width, data):
         #Replace all unknown grid spaces as fully occupied
@@ -101,31 +102,53 @@ class PathPlan(object):
         return discretized_map_2d
 
     def odom_cb(self, msg):
-        if self.map_ready:
-            #Get the x and y position of the car from the odometry
-            start_x = msg.pose.pose.position.x
-            start_y = msg.pose.pose.position.y
-            self.start_point = np.array([start_x, start_y])
+        # if self.map_ready:
+        #Get the x and y position of the car from the odometry
+        start_x = msg.pose.pose.position.x
+        start_y = msg.pose.pose.position.y
+        self.start_point = np.array([start_x, start_y])
 
-            #Signal that the start position has been loaded
-            self.start_ready = True
+        #Signal that the start position has been loaded
+        self.start_ready = True
 
-            #Attempt to plan a path
-            # self.plan_path(self.start_point, self.goal_point, self.map_data)
+        #Attempt to plan a path
+        # self.plan_path(self.start_point, self.goal_point, self.map_data)
 
     def goal_cb(self, msg):
-        if self.map_ready:
-            #Get the x and y position of the goal from the 2D Nav Goal
-            goal_x = msg.pose.position.x
-            goal_y = msg.pose.position.y
-            self.goal_point = np.array([goal_x, goal_y])
+        # if self.map_ready:
+        #     #Get the x and y position of the goal from the 2D Nav Goal
+        #     goal_x = msg.pose.position.x
+        #     goal_y = msg.pose.position.y
+        #     self.goal_point = np.array([goal_x, goal_y])
 
-            #Signal that the goal position has been loaded
-            self.goal_ready = True
+        #     #Signal that the goal position has been loaded
+        #     self.goal_ready = True
 
-            #Attempt to plan a path
-            self.plan_path(self.start_point, self.goal_point, self.map_data)
+        #     #Attempt to plan a path
+        #     self.plan_path(self.start_point, self.goal_point, self.map_data)
 
+
+        if not self.map_ready:
+            #Discretize the map
+            self.map_data = self.discretize_map(self.map_height, self.map_width, np.array(self.map_msg.data))
+            self.dmap_height, self.dmap_width = self.map_data.shape
+
+            rospy.loginfo(np.unique(self.map_msg.data))
+
+            #Signal that the map has been loaded
+            self.map_ready = True
+            
+        #Get the x and y position of the goal from the 2D Nav Goal
+        goal_x = msg.pose.position.x
+        goal_y = msg.pose.position.y
+        self.goal_point = np.array([goal_x, goal_y])
+
+        #Signal that the goal position has been loaded
+        self.goal_ready = True
+
+        #Attempt to plan a path
+        rospy.loginfo("finding path")
+        self.plan_path(self.start_point, self.goal_point, self.map_data)
 
     def plan_path(self, start_point, goal_point, map):
         if self.map_ready and self.start_ready and self.goal_ready:
