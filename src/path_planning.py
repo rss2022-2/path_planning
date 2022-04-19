@@ -31,7 +31,7 @@ class PathPlan(object):
 
         self.box_size = 1 # Determines how granular to discretize the data, A* default = 10
         self.occupied_threshold = 3 #Probability threshold to call a grid space occupied (0 to 100)
-        self.padding = 15
+        self.padding = 8
 
         self.map_ready = False
         self.start_ready = False
