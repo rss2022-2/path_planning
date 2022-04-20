@@ -24,7 +24,7 @@ class PurePursuit(object):
         self.wheelbase_length   = 0.3 #rospy.get_param("~wheelbase_length")
         self.small_angle        = 0.01 #rospy.get_param("~small_steering_angle")
         self.drive_topic        = "/drive" #rospy.get_param("~drive_topic")
-        self.P_gain             = 2.0
+        self.goal_epsilon       = 0.7
 
         # publish drive commands
         drive_msg = AckermannDriveStamped()
@@ -39,6 +39,7 @@ class PurePursuit(object):
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=10)
 
         rospy.Timer(rospy.Duration(1.0/20.0), self.send_cmd)
+        self.current_index = -1
 
     def send_cmd(self, event):
         self.drive_msg.header.stamp = rospy.Time.now()
@@ -68,6 +69,15 @@ class PurePursuit(object):
 
         # calculate closes points for each segments
         points = np.array(self.trajectory.get_points())
+
+        if (self.__two_points_distance_squared(point_car, points[-1]) <= self.goal_epsilon ):
+            self.drive_msg = AckermannDriveStamped()
+            # optimization: run fast if steer_ang is small
+            self.drive_msg.drive.speed = 0
+            self.drive_msg.drive.steering_angle = 0
+            rospy.loginfo("reaching enpoints")
+            return
+
         dis_to_seg = []
         for i in range(len(points) - 1):
             # rospy.logerr("in here")
@@ -150,6 +160,7 @@ class PurePursuit(object):
             if seg_index >= len(dis_to_seg) - 1:
                 break
         seg_index -= 1
+        self.current_index = seg_index
 
         # get the intersect point
         P1 = points[seg_index]              # Start of line segment
@@ -190,6 +201,9 @@ class PurePursuit(object):
         projection = seg_1 + t*(seg_2 - seg_1)
         return np.linalg.norm(point - projection)
 
+    @staticmethod
+    def __two_points_distance_squared(point1, point2):
+        return (point1[0] - point2[0])*(point1[0] - point2[0]) + (point1[1] - point2[1])*(point1[1] - point2[1])
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")

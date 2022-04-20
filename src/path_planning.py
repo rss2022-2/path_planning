@@ -25,13 +25,13 @@ class PathPlan(object):
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
-
+    
         self.algorithm = "A_star" # which search algorithm to use "A_star" and "RRT"
         self.map_msg = None
 
         self.box_size = 1 # Determines how granular to discretize the data, A* default = 10
         self.occupied_threshold = 3 #Probability threshold to call a grid space occupied (0 to 100)
-        self.padding = 8
+        self.padding = 10
 
         self.map_ready = False
         self.start_ready = False
@@ -75,7 +75,9 @@ class PathPlan(object):
         rospy.loginfo("before padding")
         for row in range(self.padding, height - self.padding):
             for col in range(self.padding, width - self.padding):
-                if map_2d_copy[row, col] > self.occupied_threshold:
+                if (736 < row < 780 and 831 < col < 862):
+                    rospy.loginfo("don't pad the pole in stata") 
+                elif map_2d_copy[row, col] > self.occupied_threshold:
                     # for i in range(-self.padding, self.padding + 1):
                     #     for j in range(-self.padding, self.padding + 1):
                     #         map_2d[row+i, col+j] = 100
@@ -90,11 +92,15 @@ class PathPlan(object):
         rospy.loginfo("before discretized_map_2d")
         #Iterate through every nth row and nth column
         discretized_map_2d = np.zeros((height//self.box_size, width//self.box_size))
-        for row in range(0, height-self.box_size+1, self.box_size):
-            for col in range(0, width-self.box_size+1, self.box_size):
-                #Take the average of each box_size by box_size square and make that the new value
-                avg = np.average(map_2d[row:row + self.box_size, col:col + self.box_size])
-                discretized_map_2d[row//self.box_size, col//self.box_size] = avg
+        if (self.box_size == 1):
+            discretized_map_2d = map_2d
+        else:
+            for row in range(0, height-self.box_size+1, self.box_size):
+                for col in range(0, width-self.box_size+1, self.box_size):
+                    #Take the average of each box_size by box_size square and make that the new value
+                    avg = np.average(map_2d[row:row + self.box_size, col:col + self.box_size])
+                    discretized_map_2d[row//self.box_size, col//self.box_size] = avg
+        
         rospy.loginfo("done discretized_map_2d")
         #Note: For Stata Basement, the rows are from bottom to top (index 0 = bottom of map) because the
         #orientation of the map's origin is rotated 180 degrees over the z-axis. This should resolve
@@ -149,6 +155,9 @@ class PathPlan(object):
         #Attempt to plan a path
         rospy.loginfo("finding path")
         self.plan_path(self.start_point, self.goal_point, self.map_data)
+
+        # map_point = self.xy_to_discretized(self.goal_point)
+        # rospy.loginfo(map_point)
 
     def plan_path(self, start_point, goal_point, map):
         if self.map_ready and self.start_ready and self.goal_ready:
