@@ -60,7 +60,6 @@ class PathPlan(object):
 
         map_2d = data.reshape((height, width))
         map_2d_copy = map_2d.copy()
-        rospy.loginfo("before padding")
         for row in range(self.padding, height - self.padding):
             for col in range(self.padding, width - self.padding):
                 if (736 < row < 780 and 831 < col < 862):
@@ -108,7 +107,6 @@ class PathPlan(object):
             discretized_start = self.xy_to_discretized(start_point)
             discretized_goal = self.xy_to_discretized(goal_point)
 
-            rospy.loginfo(self.algorithm + " is starting planning")
             uv_path = self.A_star(discretized_start, discretized_goal)
 
             xy_path = []
@@ -127,11 +125,8 @@ class PathPlan(object):
     def xy_to_discretized(self, coord):
         rot_mat = tf.transformations.quaternion_matrix([self.map_orientation.x, self.map_orientation.y, self.map_orientation.z, self.map_orientation.w])
         rot_mat = np.array([[rot_mat[0,0], rot_mat[0,1]], [rot_mat[1,0], rot_mat[1,1]]])
-
         pixel = (np.dot(rot_mat, coord) + np.array([self.map_position.x, self.map_position.y]))/self.map_resolution
-        discretized = (int(pixel[1]//self.box_size), int(pixel[0]//self.box_size))
-
-        return discretized
+        return (int(pixel[1]//self.box_size), int(pixel[0]//self.box_size))
 
     def discretized_to_xy(self, coord):
         quat_inverse = tf.transformations.quaternion_inverse([self.map_orientation.x, self.map_orientation.y, self.map_orientation.z, self.map_orientation.w])
@@ -140,9 +135,8 @@ class PathPlan(object):
 
         xy_untranslated = np.array([coord[1], coord[0]]) * self.box_size * self.map_resolution
         xy_translated = xy_untranslated - np.array([self.map_position.x, self.map_position.y])
-        xy = np.dot(rot_mat, xy_translated)
-
-        return tuple(xy)
+        
+        return tuple(np.dot(rot_mat, xy_translated))
 
     def A_star(self, start, goal):
         heuristic_func = lambda start, goal: math.sqrt((start[0] - goal[0])**2 + (start[1] - goal[1])**2)
@@ -192,8 +186,7 @@ class PathPlan(object):
         while node in segments.keys():
             node = segments[node]
             path.append(node)
-        path.reverse()
-        return path
+        return path.reverse()
 
 if __name__=="__main__":
     rospy.init_node("path_planning")
